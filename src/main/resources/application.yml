@@ -7,3 +7,19 @@ spring:
     username: root
     password: Eric1230
     url: jdbc:mysql://localhost:3306/nowcoder_db?createDatabaseIfNotExist=true
+  mail:
+    host: smtp.sina.com
+    port: 465
+    username: wavecomputing@sina.com
+    password: 6f13715f61880a8b
+    protocol: smtps
+    properties:
+      mail:
+        smtp:
+          ssl:
+            enable: true
+
+nowcoder:
+  path:
+    domain: http://localhost:8717/nowcoder
+    upload: /avatar
