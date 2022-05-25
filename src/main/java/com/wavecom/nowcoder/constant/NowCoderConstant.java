@@ -1,4 +1,4 @@
-package com.wavecom.nowcoder.utils;
+package com.wavecom.nowcoder.constant;
 
 /**
  * @Author liujilong
@@ -18,6 +18,16 @@ public class NowCoderConstant {
 
     /** 激活失败 */
     public static final int ACTIVATION_FAILED = 2;
+
+    /**
+     * 登录凭证有效
+     */
+    public static final int LOGIN_TICKET_VALID = 0;
+
+    /**
+     * 登录凭证失效
+     */
+    public static final int LOGIN_TICKET_INVALID = 1;
 
     /** 默认状态的登录凭证的超时时间 12小时 */
     public static final int DEFAULT_EXPIRED_SECONDS = 3600 * 12;

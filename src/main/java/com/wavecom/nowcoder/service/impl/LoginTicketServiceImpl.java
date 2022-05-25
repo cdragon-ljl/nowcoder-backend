@@ -1,5 +1,6 @@
 package com.wavecom.nowcoder.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.wavecom.nowcoder.entity.LoginTicket;
 import com.wavecom.nowcoder.mapper.LoginTicketMapper;
 import com.wavecom.nowcoder.service.LoginTicketService;
@@ -17,4 +18,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class LoginTicketServiceImpl extends ServiceImpl<LoginTicketMapper, LoginTicket> implements LoginTicketService {
 
+    @Override
+    public LoginTicket selectByTicket(String ticket) {
+        return baseMapper.selectOne(new QueryWrapper<LoginTicket>().eq("ticket", ticket));
+    }
 }

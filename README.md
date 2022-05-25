@@ -620,7 +620,7 @@ public class LoginController {
 
 此时查看数据库，新增了一条记录，状态为**未激活**：
 
-![image-20220523224704686](/Users/liujilong/Documents/java/nowcoder-backend/images/activation1.png)
+![image-20220523224704686](./images/activation1.png)
 
 * 激活账号
 
@@ -657,15 +657,407 @@ public class LoginController {
 
 ### 会话管理
 
+HTTP是无状态的，在同一个连接中，两个执行成功的请求之间是没有关系的，用户没有办法在同一个网站中进行连续的交互。使用HTTP的头部扩展，HTTP Cookies可以解决，把Cookies添加到头部中，创建一个会话让每次请求都能共享相同的上下文信息，达成相同的状态。
+
+* HTTP的基本性质
+    * HTTP是简单的
+    * HTTP是可扩展的
+    * HTTP是无状态，有会话的
+* Cookie
+    * 服务器发送到浏览器，并保存在浏览器端的一小块数据
+    * 浏览器下次访问该服务器时，会自动携带该块数据，将其发送给服务器
+* Session
+    * JavaEE的标准，用于在服务器记录客户端信息
+    * 数据存放在服务端更加安全，但是也会增加服务端的内存压力
+
 ### 生成验证码
+
+* 导入Kaptcha依赖
+
+```xml
+        <dependency>
+            <groupId>com.github.penggle</groupId>
+            <artifactId>kaptcha</artifactId>
+            <version>2.3.2</version>
+        </dependency>
+```
+
+* 配置Kaptcha
+
+创建`config.KaptchaConfig`配置类：
+
+```java
+@Configuration
+public class KaptchaConfig {
+    @Bean
+    public Producer kaptchaProducer() {
+        Properties properties = new Properties();
+        properties.setProperty("kaptcha.image.width", "100");
+        properties.setProperty("kaptcha.image.height", "40");
+        properties.setProperty("kaptcha.textproducer.font.size", "32");
+        properties.setProperty("kaptcha.textproducer.font.color", "0,0,0");
+        properties.setProperty("kaptcha.textproducer.char.string", "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+        properties.setProperty("kaptcha.textproducer.char.length", "4");
+        properties.setProperty("kaptcha.noise.impl", "com.google.code.kaptcha.impl.NoNoise");
+
+        DefaultKaptcha kaptcha = new DefaultKaptcha();
+        Config config = new Config(properties);
+        kaptcha.setConfig(config);
+
+        return kaptcha;
+    }
+}
+```
+
+* 实现获取验证码功能
+
+```java
+    @ApiOperation("获取验证码")
+    @GetMapping("/kaptcha")
+    public void getKaptcha(HttpServletResponse response, HttpSession session) {
+        //生成验证码文本及图片
+        String text = kaptchaProducer.createText();
+        BufferedImage image = kaptchaProducer.createImage(text);
+
+        //将验证码存入Session
+        session.setAttribute("kaptcha", text);
+
+        //将图片输出给浏览器
+        response.setContentType("image/png");
+
+        try {
+            OutputStream outputStream = response.getOutputStream();
+            ImageIO.write(image, "png", outputStream);
+        } catch (IOException e) {
+            log.error("响应验证码失败：" + e.getMessage());
+        }
+    }
+```
+
+访问测试：
+
+![image-20220524160156621](./images/kaptcha.png)
 
 ### 登录、退出功能
 
+* 创建登陆模型
+
+创建`vo.LoginVO`登陆模型类：
+
+```java
+@Data
+public class LoginVO {
+    @NotBlank(message = "用户名不能为空")
+    private String username;
+    @NotBlank(message = "密码不能为空")
+    private String password;
+    @NotBlank(message = "验证码不能为空")
+    private String code;
+    private Boolean remerberMe;
+}
+```
+
+> 密码使用MD5加密。
+>
+> * 登录时
+>     * 验证账号、密码、验证码
+>     * 成功时，生成登录凭证，发放给客户端
+>     * 失败时，跳转回登录页
+> * 退出时：
+>     * 将登录凭证修改为失效状态
+>     * 跳转至网站首页
+
+* 实现登录
+
+编写`login`方法：
+
+```java
+    @Override
+    public Map<String, Object> login(LoginVO loginVO, long expiration) {
+        Map<String, Object> map = new HashMap<>();
+        User user = baseMapper.selectOne(new QueryWrapper<User>().eq("username", loginVO.getUsername()));
+        if (user == null) {
+            map.put("message", "用户不存在");
+            return map;
+        }
+        if (user.getStatus() != NowCoderConstant.ACTIVATION_SUCCESS) {
+            map.put("message", "用户未激活");
+            return map;
+        }
+        String password = NowCoderUtil.md5(loginVO.getPassword() + user.getSalt());
+        if (!user.getPassword().equals(password)) {
+            map.put("message", "密码错误");
+            return map;
+        }
+        //生成登陆凭证
+        LoginTicket loginTicket = new LoginTicket();
+        loginTicket.setUserId(user.getId());
+        loginTicket.setTicket(NowCoderUtil.generateUUID());
+        loginTicket.setStatus(NowCoderConstant.LOGIN_TICKET_VALID);
+        loginTicket.setExpired(new Date(System.currentTimeMillis() + expiration));
+
+        loginTicketService.save(loginTicket);
+
+        map.put("message", "登录成功");
+        map.put("ticket", loginTicket.getTicket());
+
+        return map;
+    }
+```
+
+```java
+    @ApiOperation("登陆")
+    @PostMapping("/login")
+    public Result login(@Validated @RequestBody LoginVO loginVO, HttpSession session, HttpServletResponse response) {
+        String kaptcha = (String) session.getAttribute("kaptcha");
+        if (!kaptcha.equals(loginVO.getCode())) {
+            return Result.error("验证码错误");
+        }
+        long expiration = loginVO.getRemerberMe() ? NowCoderConstant.REMEMBER_EXPIRED_SECONDS
+                : NowCoderConstant.DEFAULT_EXPIRED_SECONDS;
+        Map<String, Object> map = userService.login(loginVO, expiration);
+        if (map.containsKey("ticket")) {
+            Cookie cookie = new Cookie("ticket", map.get("ticket").toString());
+            cookie.setPath(contextPath);
+            cookie.setMaxAge((int) expiration);
+
+            response.addCookie(cookie);
+            return Result.ok(map.get("message").toString());
+        }
+        return Result.error(map.get("message").toString());
+    }
+```
+
+登录测试成功。
+
+* 实现退出
+
+编写`logout`方法：
+
+```java
+    @Override
+    public void logout(String ticket) {
+        loginTicketService.update(new UpdateWrapper<LoginTicket>().eq("ticket", ticket).set("status", NowCoderConstant.LOGIN_TICKET_INVALID));
+    }
+```
+
+```java
+    @ApiOperation("退出登录")
+    @GetMapping("/logout")
+    public Result logout(@CookieValue("ticket") String ticket) {
+        userService.logout(ticket);
+        return Result.ok("退出成功");
+    }
+```
+
 ### 显示登录信息
+
+> 使用拦截器实现：定义拦截器->实现`HandlerInterceptor`接口->配置拦截器，指定拦截、排除的路径
+>
+> 拦截器应用：
+>
+> * 在请求开始时查询登录用户
+> * 在请求过程中持有用户数据
+> * 在请求结束时清理用户数据
+
+* 拦截器方法
+
+```java
+@Slf4j
+@Component
+public class LoginTicketInterceptor implements HandlerInterceptor {
+    @Autowired
+    private UserService userService;
+
+    @Autowired
+    private LoginTicketService loginTicketService;
+
+    @Autowired
+    private HostUtil hostUtil;
+
+    @Override
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+        String ticket = CookieUtil.getValue(request, "ticket");
+        if (ticket != null) {
+            LoginTicket loginTicket = loginTicketService.selectByTicket(ticket);
+            if (loginTicket != null
+                    && loginTicket.getStatus() == NowCoderConstant.LOGIN_TICKET_VALID
+                    && loginTicket.getExpired().after(new Date())) {
+                User user = userService.selectById(loginTicket.getUserId());
+                log.info(user.getUsername() + "start");
+                hostUtil.setUser(user);
+            }
+        }
+        return true;
+    }
+
+    @Override
+    public void postHandle(HttpServletRequest request, HttpServletResponse response, Object handler, ModelAndView modelAndView) throws Exception {
+        User user = hostUtil.getUser();
+        if (user != null) {
+            log.info(user.getUsername() + "over");
+        }
+    }
+
+    @Override
+    public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) throws Exception {
+        hostUtil.clear();
+    }
+}
+```
+
+* 配置拦截器
+
+创建`config.WebMvcConfig`拦截器配置类，配置拦截器：
+
+```java
+@Configuration
+public class WebMvcConfig implements WebMvcConfigurer {
+    @Autowired
+    private LoginTicketInterceptor loginTicketInterceptor;
+
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(loginTicketInterceptor).addPathPatterns("/**");
+    }
+
+}
+```
 
 ### 账号设置
 
+* 用户上传头像
+
+上传头像，向服务器发送POST请求，表单格式为`multipart/form-data"
+
+在`UserController`中编写文件上传方法：
+
+```java
+    @ApiOperation("上传头像")
+    @PostMapping("/setting")
+    public Result uploadHeader(MultipartFile headerImage) {
+        if (headerImage == null) {
+            return Result.error("请选择要上传的头像");
+        }
+        String filename = headerImage.getOriginalFilename();
+        String suffix = filename.substring(filename.lastIndexOf("."));
+        if (StringUtils.isBlank(suffix)) {
+            return Result.error("文件格式错误");
+        }
+        //生成随机文件名
+        filename = NowCoderUtil.generateUUID() + suffix;
+        String projectPath = System.getProperty("user.dir");
+        String headerUrl = projectPath  + headerPath + "/" + filename;
+        File dest = new File(headerUrl);
+        try {
+            //上传文件
+            headerImage.transferTo(dest);
+        } catch (IOException e) {
+            log.error("文件上传失败：" + e.getMessage());
+            throw new RuntimeException("文件上传失败");
+        }
+        User user = hostUtil.getUser();
+        boolean update = userService.updateHeaderById(user.getId(), headerUrl);
+
+        return update ? Result.ok("头像上传成功") : Result.error("头像上传失败");
+    }
+```
+
+* 查看头像
+
+在`UserController`中编写查看头像方法：
+
+```java
+    @ApiOperation("查看头像")
+    @GetMapping("/header/{id}")
+    public void getHeader(@PathVariable("id") int id, HttpServletResponse response) {
+        String filename = userService.selectHeaderById(id);
+        String suffix = filename.substring(filename.lastIndexOf("."));
+        response.setContentType("image/" + suffix);
+        try (
+                FileInputStream inputStream = new FileInputStream(filename);
+                ServletOutputStream outputStream = response.getOutputStream();
+                ) {
+            byte[] bytes = new byte[1024];
+            int b = 0;
+            while ((b = inputStream.read(bytes)) != -1) {
+                outputStream.write(bytes, 0, b);
+            }
+        } catch (IOException e) {
+            log.error("读取头像失败");
+        }
+    }
+```
+
 ### 检查登录状态
+
+防止未登录访问某些资源，可以使用拦截器和注解实现。
+
+创建`annotation.LoginRequired`注解：
+
+```java
+@Target(ElementType.METHOD)
+@Retention(RetentionPolicy.RUNTIME)
+public @interface LoginRequired {
+    
+}
+```
+
+创建`controller.interceptor.LoginRequiredInterceptor`拦截器：
+
+```java
+@Slf4j
+@Component
+public class LoginRequiredInterceptor implements HandlerInterceptor {
+    @Autowired
+    private HostUtil hostUtil;
+
+    @Override
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+        //保证拦截的是方法
+        if (handler instanceof HandlerMethod) {
+            HandlerMethod handlerMethod = (HandlerMethod) handler;
+            Method method = handlerMethod.getMethod();
+            LoginRequired loginRequired = method.getAnnotation(LoginRequired.class);
+            if (loginRequired != null && hostUtil.getUser() == null) {
+                log.error("用户未登录");
+                return false;
+            }
+        }
+        return true;
+    }
+}
+```
+
+在需要登录状态的方法上添加`LoginRequired`注解。
+
+在`config.WebMvcConfig`配置类中添加拦截器：
+
+```java
+        registry.addInterceptor(loginRequiredInterceptor).addPathPatterns("/**");
+```
+
+## 开发社区核心功能
+
+### 过滤敏感词
+
+### 发布帖子
+
+### 帖子详情
+
+### 事务管理
+
+### 显示评论
+
+### 添加评论
+
+### 私信列表
+
+### 发送私信
+
+### 统一异常处理
+
+### 统一记录日志
 
 
 

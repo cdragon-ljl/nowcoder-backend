@@ -1,9 +1,13 @@
 package com.wavecom.nowcoder.service;
 
+import com.wavecom.nowcoder.entity.LoginTicket;
 import com.wavecom.nowcoder.entity.User;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.wavecom.nowcoder.result.Result;
+import com.wavecom.nowcoder.vo.LoginVO;
 import com.wavecom.nowcoder.vo.RegisterVO;
+
+import java.util.Map;
 
 /**
  * <p>
@@ -29,4 +33,40 @@ public interface UserService extends IService<User> {
      * @return
      */
     public Result activation(int id, String code);
+
+    /**
+     * 登录账号
+     * @param loginVO
+     * @param expiration
+     * @return
+     */
+    public Map<String, Object> login(LoginVO loginVO, long expiration);
+
+    /**
+     * 退出登录
+     * @param ticket
+     */
+    public void logout(String ticket);
+
+    /**
+     * 根据用户id查找
+     * @param id
+     * @return
+     */
+    public User selectById(Integer id);
+
+    /**
+     * 根据用户id更新头像
+     * @param id
+     * @param headerUrl
+     * @return
+     */
+    public boolean updateHeaderById(Integer id, String headerUrl);
+
+    /**
+     * 根据用户id查找头像
+     * @param id
+     * @return
+     */
+    public String selectHeaderById(Integer id);
 }

@@ -2,14 +2,17 @@ package com.wavecom.nowcoder.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.wavecom.nowcoder.entity.LoginTicket;
 import com.wavecom.nowcoder.entity.User;
 import com.wavecom.nowcoder.mapper.UserMapper;
 import com.wavecom.nowcoder.result.Result;
+import com.wavecom.nowcoder.service.LoginTicketService;
 import com.wavecom.nowcoder.service.UserService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.wavecom.nowcoder.utils.MailUtil;
-import com.wavecom.nowcoder.utils.NowCoderConstant;
+import com.wavecom.nowcoder.constant.NowCoderConstant;
 import com.wavecom.nowcoder.utils.NowCoderUtil;
+import com.wavecom.nowcoder.vo.LoginVO;
 import com.wavecom.nowcoder.vo.RegisterVO;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,6 +20,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
 
 /**
@@ -35,6 +40,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Value("${nowcoder.path.domain}")
     private String domain;
+
+    @Autowired
+    private LoginTicketService loginTicketService;
 
     @Override
     public Result register(RegisterVO registerVO) {
@@ -59,7 +67,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setStatus(NowCoderConstant.ACTIVATION_NOT);
         //生成激活码
         user.setActivationCode(NowCoderUtil.generateUUID());
-        user.setHeaderUrl(String.format("http://images.nowcoder.com/head/%dt.png",
+        user.setHeaderUrl(String.format("http://images.wavecom.nowcoder.com/head/%dt.png",
                 new Random().nextInt(100)));
         user.setCreateTime(new Date());
 
@@ -87,5 +95,57 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         } else {
             return Result.error("激活失败");
         }
+    }
+
+    @Override
+    public Map<String, Object> login(LoginVO loginVO, long expiration) {
+        Map<String, Object> map = new HashMap<>();
+        User user = baseMapper.selectOne(new QueryWrapper<User>().eq("username", loginVO.getUsername()));
+        if (user == null) {
+            map.put("message", "用户不存在");
+            return map;
+        }
+        if (user.getStatus() != NowCoderConstant.ACTIVATION_SUCCESS) {
+            map.put("message", "用户未激活");
+            return map;
+        }
+        String password = NowCoderUtil.md5(loginVO.getPassword() + user.getSalt());
+        if (!user.getPassword().equals(password)) {
+            map.put("message", "密码错误");
+            return map;
+        }
+        //生成登陆凭证
+        LoginTicket loginTicket = new LoginTicket();
+        loginTicket.setUserId(user.getId());
+        loginTicket.setTicket(NowCoderUtil.generateUUID());
+        loginTicket.setStatus(NowCoderConstant.LOGIN_TICKET_VALID);
+        loginTicket.setExpired(new Date(System.currentTimeMillis() + expiration));
+
+        loginTicketService.save(loginTicket);
+
+        map.put("message", "登录成功");
+        map.put("ticket", loginTicket.getTicket());
+
+        return map;
+    }
+
+    @Override
+    public void logout(String ticket) {
+        loginTicketService.update(new UpdateWrapper<LoginTicket>().eq("ticket", ticket).set("status", NowCoderConstant.LOGIN_TICKET_INVALID));
+    }
+
+    @Override
+    public User selectById(Integer id) {
+        return baseMapper.selectById(id);
+    }
+
+    @Override
+    public boolean updateHeaderById(Integer id, String headerUrl) {
+        return this.update(new UpdateWrapper<User>().eq("id", id).set("header_url", headerUrl));
+    }
+
+    @Override
+    public String selectHeaderById(Integer id) {
+        return baseMapper.selectById(id).getHeaderUrl();
     }
 }

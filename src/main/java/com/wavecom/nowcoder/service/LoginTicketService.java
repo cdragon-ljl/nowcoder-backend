@@ -13,4 +13,10 @@ import com.baomidou.mybatisplus.extension.service.IService;
  */
 public interface LoginTicketService extends IService<LoginTicket> {
 
+    /**
+     * 根据ticket查找登录记录
+     * @param ticket
+     * @return
+     */
+    public LoginTicket selectByTicket(String ticket);
 }
