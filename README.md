@@ -384,8 +384,8 @@ public interface NowCoderConstant {
   mail:
     host: smtp.sina.com
     port: 465
-    username: wavecomputing@sina.com
-    password: 6f13715f61880a8b
+    username: 
+    password: 
     protocol: smtps
     properties:
       mail:
