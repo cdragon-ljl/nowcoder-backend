@@ -35,6 +35,41 @@ public class NowCoderConstant {
     /** 记住状态下的登录凭证超时时间 100天 */
     public static final int REMEMBER_EXPIRED_SECONDS = 3600 * 24 * 100;
 
+    /**
+     * 普通贴
+     */
+    public static final int DISCUSS_POST_TYPE_NORMAL = 0;
+
+    /**
+     * 置顶贴
+     */
+    public static final int DISCUSS_POST_TYPE_TOP = 1;
+
+    /**
+     * 普通评论
+     */
+    public static final int COMMENT_TYPE_NORMAL = 0;
+
+    /**
+     * 置顶评论
+     */
+    public static final int COMMENT_TYPE_TOP = 1;
+
+    /**
+     * 回话状态-未读
+     */
+    public static final int MESSAGE_STATUS_UNREAD = 0;
+
+    /**
+     * 回话状态-已读
+     */
+    public static final int MESSAGE_STATUS_READ = 1;
+
+    /**
+     * 回话状态-删除
+     */
+    public static final int MESSAGE_STATUS_DELETE = 2;
+
     /** 实体类型：帖子 */
     public static final int ENTITY_TYPE_POST = 1;
 

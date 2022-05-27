@@ -26,3 +26,7 @@ nowcoder:
     domain: http://localhost:8717/nowcoder
     upload:
       header: /upload/header
+
+logging:
+  level:
+    com.wavecom.nowcoder: debug

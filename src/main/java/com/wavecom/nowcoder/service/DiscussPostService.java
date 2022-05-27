@@ -13,4 +13,25 @@ import com.baomidou.mybatisplus.extension.service.IService;
  */
 public interface DiscussPostService extends IService<DiscussPost> {
 
+    /**
+     * 新增一条帖子
+     * @param discussPost
+     * @return
+     */
+    public int addDiscussPost(DiscussPost discussPost);
+
+    /**
+     * 获取帖子详情
+     * @param discussPostId
+     * @return
+     */
+    public DiscussPost getDiscussPostById(int discussPostId);
+
+    /**
+     * 更新评论数量
+     * @param entityId
+     * @param count
+     * @return
+     */
+    public boolean updateCommentCount(Integer entityId, Integer count);
 }

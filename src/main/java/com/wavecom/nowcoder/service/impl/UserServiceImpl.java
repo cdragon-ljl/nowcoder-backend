@@ -148,4 +148,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     public String selectHeaderById(Integer id) {
         return baseMapper.selectById(id).getHeaderUrl();
     }
+
+    @Override
+    public User selectByUsername(String username) {
+        return baseMapper.selectOne(new QueryWrapper<User>().eq("username", username));
+    }
 }

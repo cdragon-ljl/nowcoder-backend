@@ -69,4 +69,11 @@ public interface UserService extends IService<User> {
      * @return
      */
     public String selectHeaderById(Integer id);
+
+    /**
+     * 根据用户名查找用户
+     * @param username
+     * @return
+     */
+    public User selectByUsername(String username);
 }

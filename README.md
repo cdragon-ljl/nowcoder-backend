@@ -1041,23 +1041,585 @@ public class LoginRequiredInterceptor implements HandlerInterceptor {
 
 ### 过滤敏感词
 
+在实际应用中，如果敏感词比较多、字符串可能比较长的情况下使用JDK自带的`replace`方法替换性能比较差，可以使用前缀树来实现过滤敏感词的算法。但前缀树方法也有局限性，不能实现对停顿词、重复词的检查，所以可以优化为DFA算法过滤敏感词。
+
+* 创建工具类
+
+创建`utils.SensitiveUtil`工具类：
+
+```java
+@Slf4j
+@Component
+public class SensitiveUtil {
+
+    /**
+     * 前缀树
+     */
+    private class TrieNode {
+        private boolean isKeywordEnd = false;
+        private Map<Character, TrieNode> subNodes = new HashMap<>();
+
+        public boolean isKeywordEnd() {
+            return isKeywordEnd;
+        }
+
+        public void setKeywordEnd(boolean keywordEnd) {
+            isKeywordEnd = keywordEnd;
+        }
+
+        /**
+         * 添加子节点
+         * @param c
+         * @param node
+         */
+        public void addSubNode(Character c, TrieNode node) {
+            subNodes.put(c, node);
+        }
+
+        /**
+         * 获取子节点
+         * @param c
+         * @return
+         */
+        public TrieNode getSubNode(Character c) {
+            return subNodes.get(c);
+        }
+    }
+
+    /**
+     * 替换后的字符
+     */
+    private static final String REPLACEMENT = "***";
+
+    private TrieNode root = new TrieNode();
+
+    /**
+     * 将一个敏感词加入前缀树
+     * @param keyword
+     */
+    private void addKeyword(String keyword) {
+        TrieNode temp = root;
+        for (int i = 0; i < keyword.length(); i++) {
+            char c = keyword.charAt(i);
+            TrieNode subNode = temp.getSubNode(c);
+            if (subNode == null) {
+                //初始化子节点
+                subNode = new TrieNode();
+                temp.addSubNode(c, subNode);
+            }
+
+            //指向子节点，进入下一轮循环
+            temp = subNode;
+            //设置结束标识
+            if (i == keyword.length() - 1) {
+                temp.setKeywordEnd(true);
+            }
+        }
+    }
+
+    /**
+     * 判断是否为符号
+     * @param c
+     * @return
+     */
+    private boolean isSymbol(Character c) {
+        //0x2E80-0x9FFFF是东亚文字范围
+        return !CharUtils.isAsciiAlphanumeric(c) && (c < 0x2E80 || c > 0x9FFFF);
+    }
+
+    /**
+     * 在项目启动之后执行，加载数据
+     */
+    @PostConstruct
+    public void loadSensitiveWords() {
+        try (
+                InputStream is = this.getClass().getClassLoader().getResourceAsStream("sensitive-words.txt");
+                BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+                ) {
+            String keyword;
+            while ((keyword = reader.readLine()) != null) {
+                //添加到前缀树
+                this.addKeyword(keyword);
+            }
+        } catch (IOException e) {
+            log.error("敏感词加载失败");
+        }
+    }
+
+    /**
+     * 过滤敏感词
+     * @param text
+     * @return
+     */
+    public String filter(String text) {
+        if (StringUtils.isBlank(text)) {
+            return null;
+        }
+
+        TrieNode temp = root;
+        int begin = 0, position = 0;
+        //结果
+        StringBuilder sb = new StringBuilder();
+
+        while (position < text.length()) {
+            char c = text.charAt(position);
+            //跳过符号
+            if (isSymbol(c)) {
+                if (temp == root) {
+                    sb.append(c);
+                    begin++;
+                }
+                position++;
+                continue;
+            }
+
+            temp = temp.getSubNode(c);
+            if (temp == null) {
+                //以begin开头的字符串不是敏感词
+                sb.append(text.charAt(begin));
+                //进入下一个位置
+                position = ++begin;
+                //重新指向根节点
+                temp = root;
+            } else if (temp.isKeywordEnd()) {
+                //发现敏感词，将begin-position字符串替换掉
+                sb.append(REPLACEMENT);
+                //进入下一个位置
+                begin = ++position;
+                //重新指向根节点
+                temp = root;
+            } else {
+                //检查下一个字符
+                position++;
+            }
+        }
+        //将最后一批自负计入结果
+        sb.append(text.substring(begin));
+
+        return sb.toString();
+    }
+}
+```
+
+* 测试效果
+
+在`resources`目录下创建`sensitive-words.txt`文件，填写要过滤的敏感词。
+
+```txt
+傻瓜
+垃圾
+```
+
+创建测试方法：
+
+```java
+    @Test
+    void sensitiveTest() {
+        String result = sensitiveUtil.filter("你是傻瓜吗，什么垃圾玩意");
+        System.out.println(result);
+    }
+```
+
+执行结果如下：
+
+![image-20220525175443352](./images/sensitive.png)
+
 ### 发布帖子
+
+* 创建发布帖子方法
+
+```java
+    @Override
+    public int addDiscussPost(DiscussPost discussPost) {
+        discussPost.setTitle(sensitiveUtil.filter(discussPost.getTitle()));
+        discussPost.setContent(sensitiveUtil.filter(discussPost.getContent()));
+
+        return baseMapper.insert(discussPost);
+    }
+```
+
+```java
+    @ApiOperation("发布帖子")
+    @PostMapping("/add")
+    public Result addDiscussPost(String title, String content) {
+        User user = hostUtil.getUser();
+        if (user == null) {
+            return Result.error("请登录后发布");
+        }
+        DiscussPost discussPost = new DiscussPost();
+        discussPost.setUserId(user.getId().toString());
+        discussPost.setTitle(title);
+        discussPost.setContent(content);
+        discussPost.setType(NowCoderConstant.DISCUSS_POST_TYPE_NORMAL);
+        discussPost.setCreateTime(new Date());
+
+        int insert = discussPostService.addDiscussPost(discussPost);
+
+        return insert == 1 ? Result.ok("发布成功") : Result.error("发布失败");
+    }
+```
 
 ### 帖子详情
 
+* 根据帖子id查看帖子
+
+```java
+    @Override
+    public DiscussPost getDiscussPostById(int discussPostId) {
+        return baseMapper.selectById(discussPostId);
+    }
+```
+
+```java
+    @ApiOperation("帖子详情")
+    @GetMapping("/detail/{discussPostId}")
+    public Result<DiscussPostVO> getDiscussPost(@PathVariable("discussPostId") int discussPostId) {
+        DiscussPostVO discussPostVO = new DiscussPostVO();
+        DiscussPost discussPost = discussPostService.getDiscussPostById(discussPostId);
+        User user = userService.selectById(Integer.parseInt(discussPost.getUserId()));
+        discussPostVO.setUsername(user.getUsername());
+        discussPostVO.setDiscussPost(discussPost);
+
+        return Result.ok(discussPostVO);
+    }
+```
+
 ### 事务管理
+
+事务是由N步数据库操作序列组成的逻辑执行单元，这系列操作要么全执行，要么全放弃。
+
+* 事务的特性（ACID）
+    * 原子性（Atomicity）：事务是应用中不可再分的最小执行体
+    * 一致性（Consistency）：事务执行的结果，须使数据库从一个一致性状态，变为另一个一致性状态
+    * 隔离性（Isolation）：各个事务的执行互不干扰，任何事务的内部操作对其他事务都是隔离的
+    * 持久性（Durability）：事务一旦提交，对数据所做的任何改变都要记录到永久存储器中
+
+* Spring事务管理
+    * 声明式事务
+        * 通过XML配置，声明某方法的事务特征
+        * 通过注解，声明某方法的事务特征
+    * 编程式事务
+        * 通过TransactionTemplate管理事务，并通过它执行数据库的操作
 
 ### 显示评论
 
+```java
+    @Override
+    public List<Comment> selectComment(int discussPostId) {
+        List<Comment> comments = baseMapper.selectList(new QueryWrapper<Comment>()
+                .eq("entity_id", discussPostId)
+                .eq("entity_type", NowCoderConstant.ENTITY_TYPE_POST)
+                .eq("status", 0));
+        return comments;
+    }
+```
+
+```java
+    @ApiOperation("查询评论")
+    @GetMapping("/get/{discussPostId}")
+    public Result<List<Comment>> getComment(@PathVariable("discussPostId") int discussPostId) {
+        List<Comment> comments = commentService.selectComment(discussPostId);
+        return Result.ok(comments);
+    }
+```
+
 ### 添加评论
+
+```java
+    @Override
+    @Transactional(isolation = Isolation.READ_COMMITTED, propagation = Propagation.REQUIRED, rollbackFor = Exception.class)
+    public int addComment(Comment comment) {
+        comment.setContent(sensitiveUtil.filter(comment.getContent()));
+        int insert = baseMapper.insert(comment);
+
+        if (comment.getEntityType() == NowCoderConstant.ENTITY_TYPE_POST) {
+            Integer count = baseMapper.selectCount(new QueryWrapper<Comment>()
+                    .eq("status", 0)
+                    .eq("entity_type", comment.getEntityType())
+                    .eq("entity_id", comment.getEntityId()));
+            discussPostService.updateCommentCount(comment.getEntityId(), count);
+        }
+        return insert;
+    }
+```
+
+```java
+    @ApiOperation("评论帖子")
+    @PostMapping("/add/{discussPostId}")
+    public Result addComment(@PathVariable("discussPostId") int discussPostId, Comment comment) {
+        comment.setUserId(hostUtil.getUser().getId());
+        comment.setEntityType(NowCoderConstant.ENTITY_TYPE_POST);
+        comment.setEntityId(discussPostId);
+        comment.setStatus(NowCoderConstant.COMMENT_TYPE_NORMAL);
+        comment.setCreateTime(new Date());
+        int add = commentService.addComment(comment);
+
+        return add == 1 ? Result.ok("评论成功") : Result.error("评论失败");
+    }
+```
 
 ### 私信列表
 
+```java
+    @Override
+    public List<Message> selectMessageList(Integer id) {
+        return baseMapper.selectList(new QueryWrapper<Message>()
+                .ne("status", 2)
+                .and(w -> {
+                    w.eq("from_id", id).or().eq("to_id", id);
+                }));
+    }
+
+    @Override
+    public Integer selectMessageCount(String conversationId) {
+        return baseMapper.selectCount(new QueryWrapper<Message>()
+                .eq("conversation_id", conversationId));
+    }
+
+    @Override
+    public Integer selectUnreadMessageCount(Integer id, String conversationId) {
+        return baseMapper.selectCount(new QueryWrapper<Message>()
+                .eq("to_id", id)
+                .eq("conversation_id", conversationId)
+                .eq("status", NowCoderConstant.MESSAGE_STATUS_UNREAD));
+    }
+```
+
+```java
+    @ApiOperation("获取私信列表")
+    @GetMapping("/getList")
+    public Result<List<Map<String, Object>>> getMessageList(long cur, long size) {
+        User user = hostUtil.getUser();
+        Page<Message> messagePage = new Page<>();
+        messagePage.setCurrent(cur);
+        messagePage.setMaxLimit(size);
+
+        List<Message> messageList = messageService.selectMessageList(user.getId());
+        List<Map<String, Object>> messageMap = new ArrayList<>();
+        if (messageList != null) {
+            for (Message message : messageList) {
+                HashMap<String, Object> map = new HashMap<>();
+                map.put("messages", message);
+                map.put("messageCount", messageService.selectMessageCount(message.getConversationId()));
+                map.put("unreadCount", messageService.selectUnreadMessageCount(user.getId(), message.getConversationId()));
+                int targetId = user.getId().equals(message.getFromId()) ? message.getFromId() : message.getToId();
+                map.put("targetId", userService.selectById(targetId));
+
+                messageMap.add(map);
+            }
+        }
+        return Result.ok(messageMap);
+    }
+
+    @ApiOperation("查看私信详情")
+    @GetMapping("/detail/{conversationId}")
+    public Result<List<Message>> getMessagesDetail(@PathVariable("conversationId") String conversationId) {
+        List<Message> messageList = messageService.selectMessagesByConversationId(conversationId);
+        List<Message> messages = new ArrayList<>();
+        if (messageList != null) {
+            for (Message message : messageList) {
+                if (hostUtil.getUser().getId().equals(message.getToId())
+                        && message.getStatus() != NowCoderConstant.MESSAGE_STATUS_UNREAD) {
+                    messages.add(message);
+                }
+            }
+        }
+        if (messages != null) {
+            messageService.readMessageById(messages);
+        }
+
+        return Result.ok(messageList);
+    }
+```
+
 ### 发送私信
+
+```java
+    @Override
+    public Integer addMessage(Message message) {
+        message.setContent(sensitiveUtil.filter(message.getContent()));
+
+        return baseMapper.insert(message);
+    }
+```
+
+```java
+    @ApiOperation("发送私信")
+    @PostMapping("/send")
+    public Result sendMessage(String to, String content) {
+        User target = userService.selectByUsername(to);
+        if (target == null) {
+            return Result.error("目标用户不存在");
+        }
+        Message message = new Message();
+        message.setFromId(hostUtil.getUser().getId());
+        message.setToId(target.getId());
+        message.setConversationId(message.getFromId() + "->" + message.getToId());
+        message.setContent(content);
+        message.setCreateTime(new Date());
+        int insert = messageService.addMessage(message);
+
+        return insert == 1 ? Result.ok("发送成功") : Result.error("发送失败");
+    }
+```
 
 ### 统一异常处理
 
+> * `@ControllerAdvice`
+>     * 用于修饰类，表示该类是`Controller`的全局配置类
+>     * 在此类中，可以对`Controller`进行如下三种**全局配置**
+>         * 异常处理
+>         * 绑定数据
+>         * 绑定参数
+> * `ExceptionHandler`
+>     * 用于修饰方法，该方法会在`Controller`出现异常后被调用，用于处理捕获到的异常
+> * `DataBinder`
+>     * 用于修饰方法，该方法会在`Controller`方法执行前被调用，用于绑定参数的转换器
+
+* 创建`Advice`类
+
+创建`controller.advice.ControllerAdvice`类
+
+```java
+@Slf4j
+@RestControllerAdvice("com.wavecom.nowcoder.controller")
+public class ControllerAdvice {
+    /**
+     * JSR303校验异常
+     * @param e
+     * @return
+     */
+    @ExceptionHandler(value = MethodArgumentNotValidException.class)
+    public Result handleValidException(MethodArgumentNotValidException e) {
+        log.error("数据校验出现问题{}，异常类型为{}", e.getMessage(), e.getClass());
+        BindingResult bindingResult = e.getBindingResult();
+        Map<String, String> map = new HashMap<>();
+        List<FieldError> fieldErrors = bindingResult.getFieldErrors();
+        fieldErrors.forEach(fieldError -> {
+            map.put(fieldError.getField(), fieldError.getDefaultMessage());
+        });
+        return Result.error(BizCodeEnum.VALID_EXCEPTION.getCode(), BizCodeEnum.VALID_EXCEPTION.getMsg(), map);
+    }
+
+    /**
+     * 全局异常
+     * @param t
+     * @return
+     */
+    @ExceptionHandler(value = Throwable.class)
+    public Result handleValidException(Throwable t) {
+        return Result.error(BizCodeEnum.UNKNOWN_EXCEPTION.getCode(), BizCodeEnum.UNKNOWN_EXCEPTION.getMsg());
+    }
+}
+```
+
 ### 统一记录日志
+
+> Aspect Oriented Programing（AOP），即切面编程，是对OOP的补充。
+>
+> ![image-20220527144120015](./images/aop.png)
+>
+> AOP术语：
+>
+> ![image-20220527144206173](./images/aop2.png)
+>
+> AOP的实现：
+>
+> * AspectJ
+>     * 语言级实现，扩展了Java语言，定义了AOP语法
+>     * 在**编译期**织入代码，有专门的编译器，用来生成遵守Java字节码规范的class文件
+> * Spring AOP
+>     * 使用纯Java实现，不需要专门的编译过程，也不需要特殊的类装载器
+>     * 在运行时通过代理方式织入代码，只支持方法类型的连接点
+>     * 支持对AspectJ的集成
+>
+> SpringAOP两种代理方式：
+>
+> * JDK动态代理
+>     * Java提供的动态代理技术，可以在运行时创建接口的代理实例
+>     * 默认采用此方法，在接口的代理实例中织入代码
+> * CGLib动态代理
+>     * 采用底层的字节码技术，在运行期创建子类代理实例
+>     * 当目标对象不存在接口时，SpringAOP会采用此种方式，在子类实例中织入代码
+
+* AOP测试
+
+添加AOP依赖
+
+```xml
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+```
+
+创建`aspect.AspectTest`类
+
+```java
+@Aspect
+@Component
+@Deprecated
+public class AspectTest {
+    @Pointcut("execution(* com.wavecom.nowcoder.service.*.*(..))")
+    public void pointcut() {
+
+    }
+
+    @Before("pointcut()")
+    public void before() {
+        System.out.println("before");
+    }
+
+    @After("pointcut()")
+    public void after() {
+        System.out.println("after");
+    }
+
+    @AfterReturning("pointcut()")
+    public void afterReturning() {
+        System.out.println("afterReturning");
+    }
+
+    @AfterThrowing("pointcut()")
+    public void afterThrowing() {
+        System.out.println("afterThrowing");
+    }
+
+    @Around("pointcut()")
+    public Object around(ProceedingJoinPoint joinPoint) throws Throwable {
+        System.out.println("around before");
+        Object proceed = joinPoint.proceed();
+        System.out.println("around after");
+        return proceed;
+    }
+}
+```
+
+* ServiceAspect
+
+创建`aspect.ServiceLogAspect`切面类：
+
+```java
+@Aspect
+@Component
+@Slf4j
+public class ServiceLogAspect {
+    @Pointcut("execution(* com.wavecom.nowcoder.service.*.*(..))")
+    public void pointcut() {
+
+    }
+
+    @Before("pointcut()")
+    public void before(JoinPoint joinPoint) {
+        ServletRequestAttributes requestAttributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        HttpServletRequest request = requestAttributes.getRequest();
+        String ip = request.getRemoteHost();
+        String now = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
+        String target = joinPoint.getSignature().getDeclaringTypeName() + "." + joinPoint.getSignature().getName();
+        log.info(String.format("用户[%s]在[%s]访问了[%s]。", ip, now, target));
+    }
+}
+```
 
 
 
