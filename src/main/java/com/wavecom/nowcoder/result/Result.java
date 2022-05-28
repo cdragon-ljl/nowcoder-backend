@@ -32,11 +32,27 @@ public class Result<T> {
     }
 
     /**
+     * default ok
+     * @return 200, success
+     */
+    public static Result ok(String msg) {
+        return new Result(200, msg);
+    }
+
+    /**
      * ok with data
      * @return 200, success, data
      */
     public static Result ok(Object data) {
         return new Result(200, "success", data);
+    }
+
+    /**
+     * default ok
+     * @return 200, success
+     */
+    public static Result ok(String msg, Object data) {
+        return new Result(200, msg, data);
     }
 
     /**

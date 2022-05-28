@@ -12,11 +12,13 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.wavecom.nowcoder.utils.MailUtil;
 import com.wavecom.nowcoder.constant.NowCoderConstant;
 import com.wavecom.nowcoder.utils.NowCoderUtil;
+import com.wavecom.nowcoder.utils.RedisUtil;
 import com.wavecom.nowcoder.vo.LoginVO;
 import com.wavecom.nowcoder.vo.RegisterVO;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.Date;
@@ -43,6 +45,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Autowired
     private LoginTicketService loginTicketService;
+
+    @Autowired
+    private RedisTemplate redisTemplate;
 
     @Override
     public Result register(RegisterVO registerVO) {
@@ -121,7 +126,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         loginTicket.setStatus(NowCoderConstant.LOGIN_TICKET_VALID);
         loginTicket.setExpired(new Date(System.currentTimeMillis() + expiration));
 
-        loginTicketService.save(loginTicket);
+//        loginTicketService.save(loginTicket);
+        //使用Redis重构
+        String ticketKey = RedisUtil.getTicketKey(loginTicket.getTicket());
+        redisTemplate.opsForValue().set(ticketKey, loginTicket);
 
         map.put("message", "登录成功");
         map.put("ticket", loginTicket.getTicket());
@@ -131,7 +139,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Override
     public void logout(String ticket) {
-        loginTicketService.update(new UpdateWrapper<LoginTicket>().eq("ticket", ticket).set("status", NowCoderConstant.LOGIN_TICKET_INVALID));
+//        loginTicketService.update(new UpdateWrapper<LoginTicket>().eq("ticket", ticket).set("status", NowCoderConstant.LOGIN_TICKET_INVALID));
+        String ticketKey = RedisUtil.getTicketKey(ticket);
+        LoginTicket loginTicket = (LoginTicket) redisTemplate.opsForValue().get(ticketKey);
+        loginTicket.setStatus(NowCoderConstant.LOGIN_TICKET_INVALID);
+        redisTemplate.opsForValue().set(ticketKey, loginTicket);
     }
 
     @Override

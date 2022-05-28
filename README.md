@@ -1621,5 +1621,411 @@ public class ServiceLogAspect {
 }
 ```
 
+## Redis存储方案
+
+### Redis入门
+
+> Redis是一款基于键值对的NoSQL数据库，支持多种数据类型：**字符串（String)、哈希（Hash）、列表（List）、集合（Set）、有序集合（ZSet）等**。
+>
+> Redis将所有的数据都存放在内存中，读写性能好。同时，Redis还可以将内存中的数据以快照或日志的形式保存到硬盘上，以保证数据的安全性。
+>
+> Redis典型应用场景 包括：缓存、排行榜、计数器、社交网络、消息队列等。
+>
+> [官网](https://redis.io/)、[教程](https://dunwu.github.io/db-tutorial/pages/b2487a/)
+
+### 整合Redis
+
+* 引入依赖
+
+```xml
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+```
+
+* 配置`yml`文件
+
+```yml
+spring:
+  redis:
+    database: 0
+    host: localhost
+    port: 6379
+```
+
+* Redis配置类
+
+编写`config.RedisConfig`配置类：
+
+```java
+@Configuration
+public class RedisConfig {
+
+    @Bean
+    public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory factory) {
+        RedisTemplate<String, Object> template = new RedisTemplate<>();
+        template.setConnectionFactory(factory);
+
+        //设置key的序列化方式
+        template.setKeySerializer(RedisSerializer.string());
+        //设置value的序列化方式
+        template.setValueSerializer(RedisSerializer.json());
+
+        //设置hash的key的序列化方式
+        template.setHashKeySerializer(RedisSerializer.string());
+        //设置hash的value的序列化方式
+        template.setHashValueSerializer(RedisSerializer.json());
+
+        return template;
+    }
+}
+```
+
+* 启动Redis服务
+
+```shell
+cd /usr/local/redis/src
+./redis-server
+```
+
+![image-20220527155641344](./images/redis.png)
+
+* 测试Redis方法
+
+    * 测试字符串
+
+    ```java
+        @Test
+        void redisStringTest() {
+            String redisKey = "test:count";
+            redisTemplate.opsForValue().set(redisKey, 1);
+    
+            System.out.println(redisTemplate.opsForValue().get(redisKey));
+            System.out.println(redisTemplate.opsForValue().increment(redisKey));
+            System.out.println(redisTemplate.opsForValue().decrement(redisKey));
+        }
+    ```
+
+    ```
+    1
+    2
+    1
+    ```
+
+    * 测试哈希
+
+    ```java
+        @Test
+        void redisHashTest() {
+            String redisKey = "test:user";
+    
+            redisTemplate.opsForHash().put(redisKey, "id", 1);
+            redisTemplate.opsForHash().put(redisKey, "username", "cd");
+    
+            System.out.println(redisTemplate.opsForHash().get(redisKey, "id"));
+            System.out.println(redisTemplate.opsForHash().get(redisKey, "username"));
+        }
+    ```
+
+    ```
+    1
+    cd
+    ```
+
+    * 测试列表
+
+    ```java
+        @Test
+        void redisListTest() {
+            String redisKey = "test:ids";
+    
+            redisTemplate.opsForList().leftPush(redisKey, 101);
+            redisTemplate.opsForList().leftPush(redisKey, 102);
+            redisTemplate.opsForList().leftPush(redisKey, 103);
+    
+            System.out.println(redisTemplate.opsForList().size(redisKey));
+            System.out.println(redisTemplate.opsForList().index(redisKey, 0));
+            System.out.println(redisTemplate.opsForList().range(redisKey, 0, 2));
+    
+            System.out.println(redisTemplate.opsForList().leftPop(redisKey));
+            System.out.println(redisTemplate.opsForList().leftPop(redisKey));
+            System.out.println(redisTemplate.opsForList().leftPop(redisKey));
+        }
+    ```
+
+    ```
+    3
+    103
+    [103, 102, 101]
+    103
+    102
+    101
+    ```
+
+    * 测试集合
+
+    ```java
+        @Test
+        void redisSetTest() {
+            String redisKey = "test:names";
+    
+            redisTemplate.opsForSet().add(redisKey, "wu", "yuan", "liu", "liu", "du");
+    
+            System.out.println(redisTemplate.opsForSet().size(redisKey));
+            System.out.println(redisTemplate.opsForSet().pop(redisKey));
+            System.out.println(redisTemplate.opsForSet().members(redisKey));
+        }
+    ```
+
+    ```
+    4
+    wu
+    [du, yuan, liu]
+    ```
+
+    * 测试有序集合
+
+    ```java
+        @Test
+        void redisZSetTest() {
+            String redisKey = "test:mates";
+    
+            redisTemplate.opsForZSet().add(redisKey, "wu", 88);
+            redisTemplate.opsForZSet().add(redisKey, "yuan", 86);
+            redisTemplate.opsForZSet().add(redisKey, "liu", 85);
+            redisTemplate.opsForZSet().add(redisKey, "du", 87);
+    
+            System.out.println(redisTemplate.opsForZSet().zCard(redisKey));
+            System.out.println(redisTemplate.opsForZSet().score(redisKey, "liu"));
+            System.out.println(redisTemplate.opsForZSet().reverseRank(redisKey, "liu"));
+            System.out.println(redisTemplate.opsForZSet().range(redisKey, 0, 2));
+        }
+    ```
+
+    ```
+    4
+    85.0
+    3
+    [liu, yuan, du]
+    ```
+
+    * 测试Key
+
+    ```java
+        @Test
+        void redisKeyTest() {
+            redisTemplate.delete("test:user");
+    
+            System.out.println(redisTemplate.hasKey("test:user"));
+            
+            redisTemplate.expire("test:mates", 10, TimeUnit.SECONDS);
+        }
+    ```
+
+    * 测试多次访问同一个key
+
+    ```java
+        @Test
+        void redisBoundOperations() {
+            String redisKey = "test:count";
+    
+            BoundValueOperations operations = redisTemplate.boundValueOps(redisKey);
+            operations.increment();
+            operations.increment();
+            operations.increment();
+            System.out.println(operations.get());
+        }
+    ```
+
+    * 测试编程式事务
+
+    ```java
+        @Test
+        void redisTransactionTest() {
+            Object execute = redisTemplate.execute(new SessionCallback() {
+                @Override
+                public Object execute(RedisOperations operations) throws DataAccessException {
+                    String redisKey = "test:tx";
+                    //开始执行
+                    operations.multi();
+    
+                    operations.opsForSet().add(redisKey, "wu");
+                    operations.opsForSet().add(redisKey, "yuan");
+                    operations.opsForSet().add(redisKey, "liu");
+                    operations.opsForSet().add(redisKey, "du");
+    
+                    System.out.println(operations.opsForSet().members(redisKey));
+    
+                    return operations.exec();
+                }
+            });
+            System.out.println(execute);
+        }
+    ```
+
+    ```
+    []
+    [1, 1, 1, 1, [du, yuan, wu, liu]]
+    ```
+
+### 点赞
+
+创建`utils.RedisUtil`Redis工具类：
+
+```java
+package com.wavecom.nowcoder.utils;
+
+/**
+ * @Author liujilong
+ * @Project nowcoder-backend
+ * @File RedisUtil
+ * @Date 2022/5/27 3:57 PM
+ **/
+public class RedisUtil {
+    private static final String SPLIT = ":";
+    private static final String PREFIX_ENTITY_LIKE = "like:entity";
+    private static final String PREFIX_USER_LIKE = "like:user";
+    private static final String PREFIX_FOLLOWEE = "followee";
+    private static final String PREFIX_FOLLOWER = "follower";
+    private static final String PREFIX_KAPTCHA = "kaptcha";
+    private static final String PREFIX_TOKEN = "token";
+    private static final String PREFIX_USER = "user";
+
+    /**
+     * 实体的赞
+     * @param entityType
+     * @param entityId
+     * @return
+     */
+    public static String getEntityLikeKey(int entityType, int entityId) {
+
+        return PREFIX_ENTITY_LIKE + SPLIT + entityType + SPLIT + entityId;
+    }
+
+    /**
+     * 用户的赞
+     * @param uid
+     * @return
+     */
+    public static String getUserLikeKey(int uid) {
+        return PREFIX_USER_LIKE + SPLIT + uid;
+    }
+
+    /**
+     * 用户关注的实体
+     * @param uid
+     * @param entityType
+     * @return
+     */
+    public static String getFolloweeKey(int uid, int entityType) {
+        return PREFIX_FOLLOWEE + SPLIT + uid + SPLIT + entityType;
+    }
+
+    /**
+     * 实体的粉丝
+     * @param entityType
+     * @param entityId
+     * @return
+     */
+    public static String getFollowerKey(int entityType, int entityId) {
+        return PREFIX_FOLLOWER + SPLIT + entityType + SPLIT + entityId;
+    }
+
+    /**
+     * 登录验证码
+     * @param owner
+     * @return
+     */
+    public static String getKaptchaKey(String owner) {
+        return PREFIX_KAPTCHA + SPLIT + owner;
+    }
+
+    /**
+     * 登录凭证
+     * @param token
+     * @return
+     */
+    public static String getTokenKey(String token) {
+        return PREFIX_TOKEN + SPLIT + token;
+    }
+
+    /**
+     *
+     * @param uid
+     * @return
+     */
+    public static String getUserKey(int uid) {
+        return PREFIX_USER + SPLIT + uid;
+    }
+}
+
+```
+
+创建`service.LikeService`接口及其实现类`service.LikeServiceImpl`，编写点赞方法：
+
+```java
+    @Override
+    public void like(int userId, int entityType, int entityId, int entityUserId) {
+        redisTemplate.execute(new SessionCallback() {
+            @Override
+            public Object execute(RedisOperations operations) throws DataAccessException {
+                String entityLikeKey = RedisUtil.getEntityLikeKey(entityType, entityId);
+                String userLikeKey = RedisUtil.getUserLikeKey(entityUserId);
+
+                //判断是否已经点过赞
+                Boolean isMember = operations.opsForSet().isMember(entityLikeKey, userId);
+                operations.multi();
+                if (isMember) {
+                    operations.opsForSet().remove(entityLikeKey, userId);
+                    operations.opsForValue().decrement(userLikeKey);
+                } else {
+                    operations.opsForSet().add(entityLikeKey, userId);
+                    operations.opsForValue().increment(userLikeKey);
+                }
+                return operations.exec();
+            }
+        });
+    }
+```
+
+### 我收到的赞
+
+### 关注、取消关注
+
+### 关注列表、粉丝列表
+
+### 优化登陆模块
+
+> 使用Redis存储验证码：
+>
+> * 验证码需要频繁的访问和刷新
+> * 验证码不需要永久保存，短时间失效
+> * 分布式部署是，存在Session共享的问题
+>
+> 使用Redis存储登录凭证
+>
+> * 处理每次请求时，都要查询用户的登录凭证，访问频繁
+>
+> 使用Redis存储用户信息
+>
+> * 处理每次请求时，都要根据凭证查询用户信息，访问频繁
+
+* 重构`LoginController`部分方法
+
+* 重构`UserService`部分方法
+
+## Kafka异步消息队列
+
+### 阻塞队列
+
+### Kafka入门
+
+### 整合Kafka
+
+### 发送系统通知
+
+### 显示系统通知
+
 
 

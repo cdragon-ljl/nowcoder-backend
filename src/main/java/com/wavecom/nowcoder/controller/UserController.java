@@ -4,6 +4,7 @@ package com.wavecom.nowcoder.controller;
 import com.wavecom.nowcoder.annotation.LoginRequired;
 import com.wavecom.nowcoder.entity.User;
 import com.wavecom.nowcoder.result.Result;
+import com.wavecom.nowcoder.service.LikeService;
 import com.wavecom.nowcoder.service.UserService;
 import com.wavecom.nowcoder.utils.HostUtil;
 import com.wavecom.nowcoder.utils.NowCoderUtil;
@@ -13,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import org.springframework.web.multipart.MultipartFile;
@@ -48,6 +50,12 @@ public class UserController {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private LikeService likeService;
+
+    @Autowired
+    private RedisTemplate redisTemplate;
 
     @ApiOperation("上传头像")
     @LoginRequired
@@ -98,6 +106,18 @@ public class UserController {
         } catch (IOException e) {
             log.error("读取头像失败");
         }
+    }
+
+    @ApiOperation("个人主页")
+    @GetMapping("/profile/{uid}")
+    public Result<User> getProfile(@PathVariable("uid") int uid) {
+        User user = userService.selectById(uid);
+        if (user == null) {
+            return Result.error(404, "用户不存在", null);
+        }
+        Long userLikeCount = likeService.getUserLikeCount(uid);
+
+        return Result.ok(user);
     }
 }
 

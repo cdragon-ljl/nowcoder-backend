@@ -13,13 +13,17 @@ spring:
     host: smtp.sina.com
     port: 465
     username:
-    password: 
+    password:
     protocol: smtps
     properties:
       mail:
         smtp:
           ssl:
             enable: true
+  redis:
+    database: 0
+    host: localhost
+    port: 6379
 
 nowcoder:
   path:
