@@ -2,6 +2,7 @@ package com.wavecom.nowcoder.config;
 
 import com.wavecom.nowcoder.controller.interceptor.LoginRequiredInterceptor;
 import com.wavecom.nowcoder.controller.interceptor.LoginTicketInterceptor;
+import com.wavecom.nowcoder.controller.interceptor.MessageInterceptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
@@ -21,10 +22,14 @@ public class WebMvcConfig implements WebMvcConfigurer {
     @Autowired
     private LoginRequiredInterceptor loginRequiredInterceptor;
 
+    @Autowired
+    private MessageInterceptor messageInterceptor;
+
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(loginTicketInterceptor).addPathPatterns("/**");
         registry.addInterceptor(loginRequiredInterceptor).addPathPatterns("/**");
+        registry.addInterceptor(messageInterceptor).addPathPatterns("/**");
     }
 
 }

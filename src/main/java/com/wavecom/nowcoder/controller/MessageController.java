@@ -39,7 +39,7 @@ public class MessageController {
     private UserService userService;
 
     @ApiOperation("获取私信列表")
-    @GetMapping("/getList")
+    @GetMapping("/list")
     public Result<List<Map<String, Object>>> getMessageList(long cur, long size) {
         User user = hostUtil.getUser();
         Page<Message> messagePage = new Page<>();
@@ -60,9 +60,23 @@ public class MessageController {
                 messageMap.add(map);
             }
         }
+        int unreadMessageCount = messageService.selectUnreadMessageCount(user.getId(), null);
+        int unreadNoticeCount = messageService.selectNoticeUnreadCount(user.getId(), null);
+
         return Result.ok(messageMap);
     }
 
+    @ApiOperation("通知列表")
+    @GetMapping("/notice/list")
+    public Result<List<Message>> getNoticeList() {
+        User user = hostUtil.getUser();
+        Message message = messageService.getLatesNotice(user.getId(), NowCoderConstant.TOPIC_COMMENT);
+        Map<String, Object> messageVO = new HashMap<>();
+        if (message != null) {
+            messageVO.put("message", message);
+        }
+        return Result.ok(null);
+    }
 
     @ApiOperation("查看私信详情")
     @GetMapping("/detail/{conversationId}")

@@ -1,7 +1,9 @@
 package com.wavecom.nowcoder.controller;
 
 import com.wavecom.nowcoder.constant.NowCoderConstant;
+import com.wavecom.nowcoder.entity.Event;
 import com.wavecom.nowcoder.entity.User;
+import com.wavecom.nowcoder.kafka.KafkaProducer;
 import com.wavecom.nowcoder.result.Result;
 import com.wavecom.nowcoder.service.FollowService;
 import com.wavecom.nowcoder.service.UserService;
@@ -34,11 +36,22 @@ public class FollowController {
     @Autowired
     private UserService userService;
 
+    @Autowired
+    private KafkaProducer kafkaProducer;
+
     @ApiOperation("关注")
     @PostMapping("/follow")
     public Result follow(int entityType, int entityId) {
         User user = hostUtil.getUser();
         followService.follow(user.getId(), entityType, entityId);
+
+        Event event = new Event();
+        event.setTopic(NowCoderConstant.TOPIC_FOLLOW);
+        event.setId(user.getId());
+        event.setEntityType(entityType);
+        event.setEntityId(entityId);
+        event.setEntityUserId(entityId);
+        kafkaProducer.fireEvent(event);
 
         return Result.ok("已关注");
     }

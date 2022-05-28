@@ -4,6 +4,7 @@ import com.aliyun.oss.OSS;
 import com.aliyun.oss.OSSClientBuilder;
 import com.aliyun.oss.OSSException;
 import com.aliyuncs.exceptions.ClientException;
+import com.wavecom.nowcoder.kafka.KafkaProducer;
 import com.wavecom.nowcoder.utils.MailUtil;
 import com.wavecom.nowcoder.utils.SensitiveUtil;
 import org.junit.jupiter.api.Test;
@@ -150,5 +151,20 @@ class NowcoderBackendApplicationTests {
         });
         System.out.println(execute);
     }
+
+//    @Autowired
+//    private KafkaProducer kafkaProducer;
+//
+//    @Test
+//    void kafkaTest() {
+//        kafkaProducer.sendMessage("test", "你好");
+//        kafkaProducer.sendMessage("test", "Hello Kafka");
+//
+//        try {
+//            Thread.sleep(1000 * 10);
+//        } catch (InterruptedException e) {
+//            e.printStackTrace();
+//        }
+//    }
 }
 

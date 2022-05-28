@@ -57,4 +57,9 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
                 .eq("status", 0));
         return comments;
     }
+
+    @Override
+    public Comment getCommentById(Integer entityId) {
+        return baseMapper.selectById(entityId);
+    }
 }

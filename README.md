@@ -2019,13 +2019,169 @@ public class RedisUtil {
 
 ### 阻塞队列
 
+> * BlockingQueue
+>     * 解决线程通信问题
+>     * 阻塞方法：put、take
+> * 生产者消费者模型
+>     * 生产者：产生数据的线程
+>     * 消费者：使用数据的线程
+> * 实现类
+>     * ArrayBlockingQueue
+>     * LinkedBlockingQueue
+>     * PriorityBlockingQueue
+>     * ...
+
 ### Kafka入门
+
+> Kafka简介
+>
+> * [官网地址](https://kafka.apache.org/)
+> * Kafka是一个分布式的流媒体平台
+> * 应用：消息系统、日志收集、用户行为追踪、流式处理。
+>
+> 特点：
+>
+> * 高吞吐量、消息持久化、高可靠性、高扩展性
+>
+> 术语：
+>
+> * Broker、Zookeeper
+> * Topic、Partition、Offset
+> * Leader Replica、Follower Replica
 
 ### 整合Kafka
 
+* 导入依赖
+
+```xml
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+```
+
+* 修改`yml`配置文件
+
+```yml
+spring:
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer: #生产者配置
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    consumer: #消费者配置
+      group-id: nowcoder-consumer-group
+      enable-auto-commit: true
+      auto-commit-interval: 3000
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+```
+
+* 测试
+
+启动Kafka：
+
+```shell
+cd /kafka/bin
+./zookeeper-server-start.sh -deamon ../config/zookeeper.properties
+./kafka-server-start.sh ../config/server.properties
+```
+
+编写`kafka.KafkaConsumer`消费类：
+
+```java
+@Component
+public class KafkaConsumer {
+    @KafkaListener(topics = {"test"})
+    public void handlerMessage(ConsumerRecord record) {
+        System.out.println(record.value());
+    }
+}
+```
+
+编写`kafka.KafkaProducer`生产类：
+
+```java
+@Component
+public class KafkaProducer {
+    @Autowired
+    private KafkaTemplate kafkaTemplate;
+
+    public void sendMessage(String topic, String content) {
+        kafkaTemplate.send(topic, content);
+    }
+}
+```
+
+编写测试方法：
+
+```java
+    @Autowired
+    private KafkaProducer kafkaProducer;
+
+    @Test
+    void kafkaTest() {
+        kafkaProducer.sendMessage("test", "你好");
+        kafkaProducer.sendMessage("test", "Hello Kafka");
+
+        try {
+            Thread.sleep(1000 * 10);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+```
+
+```
+你好
+Hello Kafka
+```
+
 ### 发送系统通知
 
+> 触发事件
+>
+> * 评论后，发布通知
+> * 点赞后，发布通知
+> * 关注后，发布通知
+>
+> 处理事件
+>
+> * 封装事件对象
+> * 开发事件的生产者
+> * 开发事件的消费者
+
+创建`entity.Event`事件实体类：
+
+```java
+@Data
+public class Event {
+    private String topic;
+    private Integer id;
+    private Integer entityType;
+    private Integer entityId;
+    private Integer entityUserId;
+    private Map<String, Object> data = new HashMap<>();
+
+    public void setData(String key, Object vale) {
+        this.data.put(key, vale);
+    }
+}
+```
+
 ### 显示系统通知
+
+> 通知列表
+>
+> * 显示评论、点赞、关注三种类型的通知
+>
+> 通知详情
+>
+> * 分页显示某一类主题所包含的通知
+>
+> 未读消息
+>
+> * 在页面头部显示所有的未读消息数量
 
 
 

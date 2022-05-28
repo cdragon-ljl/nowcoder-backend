@@ -56,4 +56,38 @@ public interface MessageService extends IService<Message> {
      * @param messages
      */
     public void readMessageById(List<Message> messages);
+
+    /**
+     * 查询主题下最新的通知
+     * @param id
+     * @param topic
+     * @return
+     */
+    public Message getLatesNotice(Integer id, String topic);
+
+    /**
+     * 查询主题所包含的通知数量
+     * @param id
+     * @param topic
+     * @return
+     */
+    public int selectNoticeCount(Integer id, String topic);
+
+    /**
+     * 查询未读的通知数量
+     * @param id
+     * @param topic
+     * @return
+     */
+    public int selectNoticeUnreadCount(Integer id, String topic);
+
+    /**
+     * 查询某个主题所包含的通知列表
+     * @param id
+     * @param topic
+     * @param offset
+     * @param limit
+     * @return
+     */
+    public List<Message> selectNotices(Integer id, String topic, int offset, int limit);
 }

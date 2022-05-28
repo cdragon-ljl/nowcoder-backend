@@ -29,4 +29,11 @@ public interface CommentService extends IService<Comment> {
      * @return
      */
     public List<Comment> selectComment(int discussPostId);
+
+    /**
+     * 根据id查询评论
+     * @param entityId
+     * @return
+     */
+    public Comment getCommentById(Integer entityId);
 }

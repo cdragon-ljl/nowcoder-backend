@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Queue;
 
 /**
  * <p>
@@ -64,5 +65,39 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
     @Override
     public void readMessageById(List<Message> messages) {
         this.updateBatchById(messages);
+    }
+
+    @Override
+    public Message getLatesNotice(Integer id, String topic) {
+        return baseMapper.selectLatesNotice(id, topic);
+    }
+
+    @Override
+    public int selectNoticeCount(Integer id, String topic) {
+        return baseMapper.selectCount(new QueryWrapper<Message>()
+                .ne("status", 2)
+                .eq("from_id", 1)
+                .eq("to_id", id)
+                .eq("conversation_id", topic));
+    }
+
+    @Override
+    public int selectNoticeUnreadCount(Integer id, String topic) {
+        return baseMapper.selectCount(new QueryWrapper<Message>()
+                .ne("status", 2)
+                .eq("from_id", 1)
+                .eq("to_id", id)
+                .isNotNull("topic")
+                .eq("conversation_id", topic));
+    }
+
+    @Override
+    public List<Message> selectNotices(Integer id, String topic, int offset, int limit) {
+        return baseMapper.selectList(new QueryWrapper<Message>()
+                .ne("status", 2)
+                .eq("from_id", 1)
+                .eq("to_id", id)
+                .eq("conversation_id", topic)
+                .orderByDesc("create_time"));
     }
 }
