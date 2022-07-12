@@ -44,7 +44,7 @@
       datasource:
         driver-class-name: com.mysql.cj.jdbc.Driver
         username: root
-        password: Eric1230
+        password: 
         url: jdbc:mysql://localhost:3306/nowcoder_db?createDatabaseIfNotExist=true
     ```
 
@@ -92,7 +92,7 @@
         dsc.setUrl("jdbc:mysql://localhost:3306/nowcoder_db?characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8");
         dsc.setDriverName("com.mysql.cj.jdbc.Driver");
         dsc.setUsername("root");
-        dsc.setPassword("Eric1230");
+        dsc.setPassword("");
         mpg.setDataSource(dsc);
 
         PackageConfig pc = new PackageConfig();
